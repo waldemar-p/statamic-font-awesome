@@ -106,7 +106,7 @@ class FontAwesome
         }
 
         return match (true) {
-            ($family === 'duotone') => "fa-{$family} fa-{$icon}",
+            ($family === 'duotone') => "fa-{$family} fa-{$style} fa-{$icon}",
             ($family === 'classic') => "fa-{$style} fa-{$icon}",
             default => "fa-{$family} fa-{$style} fa-{$icon}",
         };
