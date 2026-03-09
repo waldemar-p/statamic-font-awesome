@@ -1,166 +1,167 @@
 <template>
     <div class="flex icon-fieldtype-wrapper" v-if="icons">
-        <v-select
+        <Combobox
             ref="input"
             class="w-full"
-            append-to-body
-            :calculate-position="positionOptions"
             clearable
-            :name="name"
-            :disabled="config.disabled || isReadOnly"
-            :options="paginated"
+            :disabled="config.disabled"
+            :read-only="isReadOnly"
+            :options="filtered"
             :placeholder="config.placeholder || 'Search ...'"
             :searchable="true"
+            :ignore-filter="true"
             :multiple="false"
             :close-on-select="true"
-            :value="selectedOption"
-            @open="onOpen"
-            @close="onClose"
-            @input="vueSelectUpdated"
-            @search="(query) => (search = query)"
-            @search:focus="$emit('focus')"
-            @search:blur="$emit('blur')"
+            :model-value="value"
+            option-value="class"
+            @update:model-value="vueSelectUpdated"
+            @search="onSearch"
         >
-            <template slot="option" slot-scope="icon">
+            <template #option="icon">
                 <div class="flex items-center">
                     <i class="flex items-center w-5 h-5" :class="icon.class" />
                     <span class="ml-4 text-xs truncate">{{ icon.label }}</span>
                 </div>
             </template>
 
-            <template slot="selected-option" slot-scope="icon">
+            <template #selected-option="{ option: icon }">
                 <div class="flex items-center">
                     <i class="flex items-center w-5 h-5" :class="icon.class" />
                     <span class="ml-4 text-xs truncate">{{ icon.label }}</span>
                 </div>
             </template>
-
-            <template slot="list-footer">
-                <span v-show="hasNextPage" ref="load" />
-            </template>
-        </v-select>
+        </Combobox>
     </div>
 </template>
 
-<script>
-import { computePosition, offset } from '@floating-ui/dom';
+<script setup>
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { Fieldtype } from '@statamic/cms';
+import { Combobox } from '@statamic/cms/ui';
+import { useFontAwesomeStore } from './store';
 
-export default {
-    mixins: [Fieldtype],
+const emit = defineEmits([...Fieldtype.emits, 'focus', 'blur']);
+const props = defineProps(Fieldtype.props);
+const { expose, update, isReadOnly } = Fieldtype.use(emit, props);
 
-    data() {
-        return {
-            observer: new IntersectionObserver(this.infiniteScroll),
-            limit: 20,
-            search: '',
-        }
-    },
+defineExpose(expose);
 
-    mounted() {
-        this.meta.script ? this.loadFontAwesomeScript() : this.loadFontAwesomeCss()
-    },
+const input = ref(null);
+const search = ref('');
+const limit = ref(50);
 
-    computed: {
-        icons() {
-            return this.$store.state.publish.fontAwesome.icons
-        },
+let viewport = null;
+let observer = null;
 
-        filtered() {
-            return this.icons
-                .filter((icon) => icon.label.toLowerCase().includes(this.search.toLowerCase()))
-                .filter((icon) => this.meta.styles.includes(icon.style))
-        },
+const store = useFontAwesomeStore();
 
-        paginated() {
-            return this.filtered.slice(0, this.limit)
-        },
+const icons = computed(() => store.icons);
 
-        hasNextPage() {
-            return this.paginated.length < this.filtered.length
-        },
+const filteredAll = computed(() => {
+    if (!icons.value) return [];
+    const byStyle = icons.value.filter((icon) => props.meta.styles.includes(icon.style));
+    if (search.value.length > 0) {
+        return byStyle.filter((icon) => icon.label.toLowerCase().includes(search.value.toLowerCase()));
+    }
+    return byStyle;
+});
 
-        selectedOption() {
-            return this.icons.find(icon => icon.class === this.value);
-        },
+const filtered = computed(() => filteredAll.value.slice(0, limit.value));
 
-        fontAwesomeIsLoaded() {
-            const elements = this.meta.script
-                ? Array.from(document.getElementsByTagName("script"))
-                    .filter(script => script.src === this.meta.script)
-                : Array.from(document.getElementsByTagName("link"))
-                    .filter(link => link.href === this.meta.css)
 
-            return elements.length
-        },
-    },
+const fontAwesomeIsLoaded = computed(() => {
+    const elements = props.meta.script
+        ? Array.from(document.getElementsByTagName("script"))
+            .filter(script => script.src === props.meta.script)
+        : Array.from(document.getElementsByTagName("link"))
+            .filter(link => link.href === props.meta.css);
+    return elements.length > 0;
+});
 
-    methods: {
-        focus() {
-            this.$refs.input.focus();
-        },
-
-        vueSelectUpdated(value) {
-            if (value) {
-                this.update(value.class)
-            } else {
-                this.update(null);
-            }
-        },
-
-        async onOpen() {
-            if (this.hasNextPage) {
-                await this.$nextTick()
-                this.observer.observe(this.$refs.load)
-            }
-        },
-
-        onClose() {
-            this.observer.disconnect()
-        },
-
-        async infiniteScroll([{ isIntersecting, target }]) {
-            if (isIntersecting) {
-                const ul = target.offsetParent
-                const scrollTop = target.offsetParent.scrollTop
-                this.limit += 20
-                await this.$nextTick()
-                ul.scrollTop = scrollTop
-            }
-        },
-
-        positionOptions(dropdownList, component, { width }) {
-            dropdownList.style.width = width
-
-            computePosition(component.$refs.toggle, dropdownList, {
-                placement: 'bottom',
-                middleware: [
-                    offset({ mainAxis: 0, crossAxis: -1 }),
-                ]
-            }).then(({ x, y }) => {
-                Object.assign(dropdownList.style, {
-                    // Round to avoid blurry text
-                    left: `${Math.round(x)}px`,
-                    top: `${Math.round(y)}px`,
-                });
-            });
-        },
-
-        loadFontAwesomeScript() {
-            if (this.fontAwesomeIsLoaded) return
-
-            let externalScript = document.createElement('script')
-            externalScript.setAttribute('src', this.meta.script)
-            document.head.appendChild(externalScript)
-        },
-
-        loadFontAwesomeCss() {
-            if (this.fontAwesomeIsLoaded) return
-
-            let link = document.createElement('link')
-            link.setAttribute('rel', 'stylesheet')
-            link.setAttribute('href', this.meta.css)
-            document.head.appendChild(link)
-        },
-    },
+function focus() {
+    input.value?.focus();
 }
+
+function vueSelectUpdated(value) {
+    update(value || null);
+}
+
+function onSearch(query) {
+    search.value = query;
+    limit.value = 50;
+}
+
+function setupObserver() {
+    observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (node.nodeType === 1) {
+                    const vp = node.querySelector?.('[data-reka-combobox-viewport]') ||
+                               (node.matches?.('[data-reka-combobox-viewport]') ? node : null);
+                    if (vp && !viewport) {
+                        viewport = vp;
+                        viewport.addEventListener('scroll', handleScroll, { passive: true });
+                        emit('focus');
+                    }
+                }
+            }
+            for (const node of mutation.removedNodes) {
+                if (node.nodeType === 1 && viewport) {
+                    const vp = node.querySelector?.('[data-reka-combobox-viewport]') ||
+                               (node.matches?.('[data-reka-combobox-viewport]') ? node : null);
+                    if (vp || node.contains?.(viewport)) {
+                        viewport.removeEventListener('scroll', handleScroll);
+                        viewport = null;
+                        limit.value = 50;
+                        emit('blur');
+                    }
+                }
+            }
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function handleScroll() {
+    if (!viewport) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = viewport;
+    const nearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+
+    if (nearBottom && limit.value < filteredAll.value.length) {
+        limit.value += 50;
+    }
+}
+
+function loadFontAwesomeScript() {
+    if (fontAwesomeIsLoaded.value) return;
+
+    let externalScript = document.createElement('script');
+    externalScript.setAttribute('src', props.meta.script);
+    document.head.appendChild(externalScript);
+}
+
+function loadFontAwesomeCss() {
+    if (fontAwesomeIsLoaded.value) return;
+
+    let link = document.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', props.meta.css);
+    document.head.appendChild(link);
+}
+
+onMounted(() => {
+    if (!store.icons) {
+        store.fetchIcons();
+    }
+    props.meta.script ? loadFontAwesomeScript() : loadFontAwesomeCss();
+    setupObserver();
+});
+
+onUnmounted(() => {
+    observer?.disconnect();
+    if (viewport) {
+        viewport.removeEventListener('scroll', handleScroll);
+    }
+});
 </script>

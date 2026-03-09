@@ -1,45 +1,48 @@
 {
-    "name": "aerni/font-awesome",
-    "description": "A Statamic addon to easily add Font Awesome icons.",
-    "keywords": [
-        "statamic",
-        "font-awesome"
-    ],
-    "homepage": "https://github.com/aerni/statamic-font-awesome",
-    "license": "MIT",
-    "authors": [
-        {
-            "name": "Michael Aerni",
-            "email": "hello@michaelaerni.ch",
-            "homepage": "https://michaelaerni.ch",
-            "role": "Developer"
-        }
-    ],
-    "require": {
-        "php": "^8.1",
-        "statamic/cms": "^5.0"
+  "name": "aerni/font-awesome",
+  "description": "A Statamic addon to easily add Font Awesome icons.",
+  "keywords": [
+    "statamic",
+    "font-awesome"
+  ],
+  "homepage": "https://github.com/aerni/statamic-font-awesome",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Michael Aerni",
+      "email": "hello@michaelaerni.ch",
+      "homepage": "https://michaelaerni.ch",
+      "role": "Developer"
+    }
+  ],
+  "require": {
+    "php": "^8.2",
+    "statamic/cms": "^6.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Aerni\\FontAwesome\\": "src"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "preferred-install": "dist",
+    "sort-packages": true,
+    "allow-plugins": {
+      "pixelfear/composer-dist-plugin": true
+    }
+  },
+  "extra": {
+    "statamic": {
+      "name": "Font Awesome",
+      "description": "A Statamic addon to easily add Font Awesome icons."
     },
-    "autoload": {
-        "psr-4": {
-            "Aerni\\FontAwesome\\": "src"
-        }
-    },
-    "config": {
-        "optimize-autoloader": true,
-        "preferred-install": "dist",
-        "sort-packages": true
-    },
-    "extra": {
-        "statamic": {
-            "name": "Font Awesome",
-            "description": "A Statamic addon to easily add Font Awesome icons."
-        },
-        "laravel": {
-            "providers": [
-                "Aerni\\FontAwesome\\ServiceProvider"
-            ]
-        }
-    },
-    "minimum-stability": "dev",
-    "prefer-stable": true
+    "laravel": {
+      "providers": [
+        "Aerni\\FontAwesome\\ServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
 }
