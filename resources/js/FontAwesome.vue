@@ -1,37 +1,30 @@
 <template>
-    <div class="flex icon-fieldtype-wrapper" v-if="icons">
-        <Combobox
-            ref="input"
-            class="w-full"
-            clearable
-            :disabled="config.disabled"
-            :read-only="isReadOnly"
-            :options="filtered"
-            :placeholder="config.placeholder || 'Search ...'"
-            :searchable="true"
-            :ignore-filter="true"
-            :multiple="false"
-            :close-on-select="true"
-            :model-value="value"
-            option-value="class"
-            @update:model-value="vueSelectUpdated"
-            @search="onSearch"
-        >
-            <template #option="icon">
-                <div class="flex items-center">
-                    <i class="flex items-center w-5 h-5" :class="icon.class" />
-                    <span class="ml-4 text-xs truncate">{{ icon.label }}</span>
-                </div>
-            </template>
+    <Combobox
+        clearable
+        :class="{ 'invisible': !store.icons }"
+        :read-only="isReadOnly"
+        :options="visibleIcons"
+        :placeholder="'Type to search …'"
+        :ignore-filter="true"
+        :model-value="store.icons ? value : null"
+        option-value="class"
+        @update:model-value="update"
+        @search="search"
+    >
+        <template #option="icon">
+            <div class="flex items-center gap-4">
+                <i class="w-5 h-5" :class="icon.class" />
+                <span class="text-xs truncate">{{ icon.label }}</span>
+            </div>
+        </template>
 
-            <template #selected-option="{ option: icon }">
-                <div class="flex items-center">
-                    <i class="flex items-center w-5 h-5" :class="icon.class" />
-                    <span class="ml-4 text-xs truncate">{{ icon.label }}</span>
-                </div>
-            </template>
-        </Combobox>
-    </div>
+        <template #selected-option="{ option: icon }">
+            <div class="flex items-center gap-4">
+                <i class="w-5 h-5" :class="icon.class" />
+                <span class="text-xs truncate">{{ icon.label }}</span>
+            </div>
+        </template>
+    </Combobox>
 </template>
 
 <script setup>
@@ -46,28 +39,26 @@ const { expose, update, isReadOnly } = Fieldtype.use(emit, props);
 
 defineExpose(expose);
 
-const input = ref(null);
-const search = ref('');
-const limit = ref(50);
+const store = useFontAwesomeStore();
 
+const query = ref('');
+const limit = ref(50);
 let viewport = null;
 let observer = null;
 
-const store = useFontAwesomeStore();
+const icons = computed(() => {
+    if (!store.icons) return [];
 
-const icons = computed(() => store.icons);
+    const iconsByStyle = store.icons.filter((icon) => props.meta.styles.includes(icon.style));
 
-const filteredAll = computed(() => {
-    if (!icons.value) return [];
-    const byStyle = icons.value.filter((icon) => props.meta.styles.includes(icon.style));
-    if (search.value.length > 0) {
-        return byStyle.filter((icon) => icon.label.toLowerCase().includes(search.value.toLowerCase()));
+    if (query.value.length > 0) {
+        return iconsByStyle.filter((icon) => icon.label.toLowerCase().includes(query.value.toLowerCase()));
     }
-    return byStyle;
+
+    return iconsByStyle;
 });
 
-const filtered = computed(() => filteredAll.value.slice(0, limit.value));
-
+const visibleIcons = computed(() => icons.value.slice(0, limit.value));
 
 const fontAwesomeIsLoaded = computed(() => {
     const elements = props.meta.script
@@ -78,16 +69,37 @@ const fontAwesomeIsLoaded = computed(() => {
     return elements.length > 0;
 });
 
-function focus() {
-    input.value?.focus();
+function search(value) {
+    query.value = value;
+    limit.value = 50;
 }
 
-function vueSelectUpdated(value) {
-    update(value || null);
+function handleScroll() {
+    const { scrollTop, scrollHeight, clientHeight } = viewport;
+    const nearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+    const hasMore = limit.value < icons.value.length;
+
+    if (nearBottom && hasMore) limit.value += 50;
 }
 
-function onSearch(query) {
-    search.value = query;
+function findViewport(node) {
+    if (node.nodeType !== 1) return null;
+
+    return node.matches('[data-reka-combobox-viewport]')
+        ? node
+        : node.querySelector('[data-reka-combobox-viewport]');
+}
+
+function onViewportAdded(node) {
+    viewport = findViewport(node);
+    if (!viewport) return;
+    viewport.addEventListener('scroll', handleScroll, { passive: true });
+}
+
+function onViewportRemoved(node) {
+    if (!findViewport(node)) return;
+    viewport.removeEventListener('scroll', handleScroll);
+    viewport = null;
     limit.value = 50;
 }
 
@@ -95,71 +107,34 @@ function setupObserver() {
     observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) {
-                    const vp = node.querySelector?.('[data-reka-combobox-viewport]') ||
-                               (node.matches?.('[data-reka-combobox-viewport]') ? node : null);
-                    if (vp && !viewport) {
-                        viewport = vp;
-                        viewport.addEventListener('scroll', handleScroll, { passive: true });
-                        emit('focus');
-                    }
-                }
+                if (!viewport) onViewportAdded(node);
             }
             for (const node of mutation.removedNodes) {
-                if (node.nodeType === 1 && viewport) {
-                    const vp = node.querySelector?.('[data-reka-combobox-viewport]') ||
-                               (node.matches?.('[data-reka-combobox-viewport]') ? node : null);
-                    if (vp || node.contains?.(viewport)) {
-                        viewport.removeEventListener('scroll', handleScroll);
-                        viewport = null;
-                        limit.value = 50;
-                        emit('blur');
-                    }
-                }
+                if (viewport) onViewportRemoved(node);
             }
         }
     });
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
-function handleScroll() {
-    if (!viewport) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = viewport;
-    const nearBottom = scrollTop + clientHeight >= scrollHeight - 100;
-
-    if (nearBottom && limit.value < filteredAll.value.length) {
-        limit.value += 50;
-    }
-}
-
-function loadFontAwesomeScript() {
+function loadFontAwesome() {
     if (fontAwesomeIsLoaded.value) return;
 
-    let externalScript = document.createElement('script');
-    externalScript.setAttribute('src', props.meta.script);
-    document.head.appendChild(externalScript);
-}
+    const el = props.meta.script
+        ? Object.assign(document.createElement('script'), { src: props.meta.script })
+        : Object.assign(document.createElement('link'), { rel: 'stylesheet', href: props.meta.css });
 
-function loadFontAwesomeCss() {
-    if (fontAwesomeIsLoaded.value) return;
-
-    let link = document.createElement('link');
-    link.setAttribute('rel', 'stylesheet');
-    link.setAttribute('href', props.meta.css);
-    document.head.appendChild(link);
+    document.head.appendChild(el);
 }
 
 onMounted(() => {
-    if (!store.icons) {
-        store.fetchIcons();
-    }
-    props.meta.script ? loadFontAwesomeScript() : loadFontAwesomeCss();
+    store.fetchIcons(props.meta.url);
+    loadFontAwesome();
     setupObserver();
 });
 
 onUnmounted(() => {
-    observer?.disconnect();
+    observer.disconnect();
     if (viewport) {
         viewport.removeEventListener('scroll', handleScroll);
     }
